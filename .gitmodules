@@ -1,0 +1,3 @@
+[submodule "bib"]
+	path = bib
+	url = https://gist.github.com/201827a159120cb808ced9d43bc30ac6.git

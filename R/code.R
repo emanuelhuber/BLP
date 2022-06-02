@@ -1,6 +1,6 @@
 ##### DISTANCE-BASED GENERAL (REGIONALISED) SENSITIVITY ANALYSIS #####
 
-# ADAPTED FROM THE MATLAB CODE DEVELOPPED BY CELINE SCHEIDT 
+# ADAPTED FROM THE MATLAB CODE DEVELOPPED BY CELINE SCHEIDT
 # (STANFORD UNIVERSITY)
 
 # IDEA:
@@ -8,48 +8,71 @@
 
 require(RColorBrewer)
 
+
+# Kolmogorov-Smirnov test (KS)
+# Earth Mover’s Distance (EMD), also known as the first Wasserstein distance
+# The Cramér-von Mises Distance
+distCDF <- function(x, y, method = c("EMD", "KS", "CMD")){
+  method <- match.arg(method, c("EMD", "KS", "CMD"))
+  x_cdf <- ecdf(x)
+  y_cdf <- ecdf(y)
+
+  xy_knots <- sort(c(knots(x_cdf), knots(y_cdf)))
+  y_val <- y_cdf(xy_knots)
+  x_val <- x_cdf(xy_knots)
+  n <- length(x_val)
+  if(method == "EMD"){
+    dCDF <- sum(abs(x_val[-n] - y_val[-n]) * diff(xy_knots))
+  }else if(method == "KS"){
+    dCDF <- max(abs(x_val - y_val))
+  }else if(method == "CMD"){
+    dCDF <- sqrt(um(abs(x_val[-n] - y_val[-n])^2 * diff(xy_knots)))
+  }
+  return(dCDF)
+}
+
 resampleTest <- function(x,y, nx, n = 1, ...){
   xPerm <- sample(x, size = nx, replace = FALSE)
   qxPerm <- quantile(xPerm, ...)
   return(sum(abs(qxPerm - y)^n)^(1/n))
 }
 
-#  measure of distance between unconditional and conditional CDFs
-# + if nPerm > 0, compute p-values
-distCDF <- function(x, cl = NULL, nPerm = 1000, n = 100, type = 1){
-  probs <- seq(0, 1, length.out = n)
-  qP <- quantile(x, probs = probs, type = type)
-  cla <- unique(cl) # classes
-  ncl <- length(cla)
-  dCDF <- numeric(ncl) # initialisation distance between CDFs
-  names(dCDF) <- cla  
-  pValue <- dCDF       # initialisation p-values
-  for(i in seq_len(ncl)){
-    inCli <- cl == cla[i]
-    nci <- sum(inCli)
-    qPc <- quantile(x[inCli], probs = probs, type = type)
-    dCDF[i] <- sum( abs(qPc - qP) )
-    dCDFPerm <- replicate(nPerm, resampleTest(x, qP, nx = nci, 
-                                              probs = probs, type = type))
-    # dCDFPerm <- numeric(nPerm)
-    # for(j in seq_len(nPerm)){
-    #   xPerm <- sample(x, size = nci, replace = FALSE)
-    #   qPcPerm <- quantile(xPerm, probs = probs, type = type)
-    #   dCDFPerm[j] <- sum(abs(qPcPerm - qP))
-    # }
-    # pValue[i] <- (sum(dCDFPerm > dCDF[i])  + 1)/(nPerm + 1)
-    pValue[i] <- (sum(dCDFPerm > dCDF[i])  )/(nPerm )
-  }
-     return(list(dist = dCDF, pvalue = pValue))
-}
+# #  measure of distance between unconditional and conditional CDFs
+# # + if nPerm > 0, compute p-values
+# distCDF <- function(x, cl = NULL, nPerm = 1000, n = 100, type = 1){
+#   probs <- seq(0, 1, length.out = n)
+#   qP <- quantile(x, probs = probs, type = type)
+#   cla <- unique(cl) # classes
+#   ncl <- length(cla)
+#   dCDF <- numeric(ncl) # initialisation distance between CDFs
+#   names(dCDF) <- cla
+#   pValue <- dCDF       # initialisation p-values
+#   for(i in seq_len(ncl)){
+#     inCli <- cl == cla[i]
+#     nci <- sum(inCli)
+#     qPc <- quantile(x[inCli], probs = probs, type = type)
+#     dCDF[i] <- sum( abs(qPc - qP) )
+#     dCDFPerm <- replicate(nPerm, resampleTest(x, qP, nx = nci,
+#                                               probs = probs, type = type))
+#     # dCDFPerm <- numeric(nPerm)
+#     # for(j in seq_len(nPerm)){
+#     #   xPerm <- sample(x, size = nci, replace = FALSE)
+#     #   qPcPerm <- quantile(xPerm, probs = probs, type = type)
+#     #   dCDFPerm[j] <- sum(abs(qPcPerm - qP))
+#     # }
+#     # pValue[i] <- (sum(dCDFPerm > dCDF[i])  + 1)/(nPerm + 1)
+#     pValue[i] <- (sum(dCDFPerm > dCDF[i])  )/(nPerm )
+#   }
+#      return(list(dist = dCDF, pvalue = pValue))
+# }
 
 
-#  measure of distance between "CDF conditioned to cluster and  
+#  measure of distance between "CDF conditioned to cluster and
 # parameter 'i' (bin)"
 # and  CDF conditioned to cluster
-# @ param pCond (optional) parameter to which to compute the conditional 
+# @ param pCond (optional) parameter to which to compute the conditional
 #               interaction
-distCDFint <- function(P, i, cl = NULL, nBins = 3, pCond = NULL, 
+distCDFint <- function(P, i, cl = NULL, nBins = 3, pCond = NULL,
                        n = 100, type = 1, nPerm = 100){
   x <- P[,i]  # the contioning parameter p
   probs <- seq(0, 1, length.out = n)
@@ -67,7 +90,7 @@ distCDFint <- function(P, i, cl = NULL, nBins = 3, pCond = NULL,
   }else{
     lvls <- quantile(x, probs = (1:(nb-1))/nb)
   }
-  
+
   if(is.null(pCond)){
     intSens <- array(0,dim=c(nP, ncl, nb), dimnames = list(colnames(P),
                                                           paste0("cl",1:ncl),
@@ -75,13 +98,13 @@ distCDFint <- function(P, i, cl = NULL, nBins = 3, pCond = NULL,
   }else{
     intSens <- array(0,dim=c(ncl, nb))
   }
-  
+
   pValue <- intSens
-  
+
   # over the cluster
   for(j in seq_len(ncl)){
     idx_cl <- cl == cla[j]
-    
+
     # over the bins
     for(k in seq_len(nb)){
       if(k ==1){
@@ -138,7 +161,7 @@ distCDFint <- function(P, i, cl = NULL, nBins = 3, pCond = NULL,
 
 
 
-# colPal = c(rgb(0.95,0.95,0.95), 
+# colPal = c(rgb(0.95,0.95,0.95),
 #                         brewer.pal(3,"Reds"))(4))
 
 
@@ -157,7 +180,7 @@ dGSABarplot <- function(x, colPal = brewer.pal(4,"Reds"), main="",
   colVar[rkx >= 0.90] <- 2
   colVar[rkx >= 0.95] <- 3
   colVar[rkx >= 1] <- 4
-  
+
   op <- par(no.readonly = TRUE)
   layout(matrix(c(1,2), nrow=1, ncol=2), widths=c(6,1), heights=c(1))
   # layout.show(4)par(mai=c(1.1,1.1,0.2,0.2))
@@ -166,7 +189,7 @@ dGSABarplot <- function(x, colPal = brewer.pal(4,"Reds"), main="",
       bty="n",yaxt='n', xaxt = "n",xlab=xlab)
   for(i in seq_along(rkx)){
     z <- i - 1
-    rect(xleft=0,ybottom=z-0.4,xright=rkx[i],ytop=z+0.4, 
+    rect(xleft=0,ybottom=z-0.4,xright=rkx[i],ytop=z+0.4,
          col=colPal[colVar[i]], lwd=1)
   }
   segments(x0=1,y0=-0.5,x1=1,y1=length(rkx)-0.6,col="dodgerblue",lwd=2)
@@ -180,7 +203,7 @@ dGSABarplot <- function(x, colPal = brewer.pal(4,"Reds"), main="",
   par(mai=c(1.2,0.2,0.5,0.7), xaxs="i")
   w <- 2
   val <- c(0, 0.9, 0.95, 1, 1.01)
-  plot(c(0,w), range(val), type='n', bty='n', xaxt='n', xlab="", 
+  plot(c(0,w), range(val), type='n', bty='n', xaxt='n', xlab="",
       yaxt='n', ylab='')#, main=title)
   for (i in 1:(length(val)-1)) {
     ybot = val[i]
@@ -203,13 +226,13 @@ GSABarplotClust <- function(x, colPal =  brewer.pal(4,"Reds"), main="",
   # sensitivity ranking
   rk <- order(x_max,decreasing = FALSE)
   rkx <- 1-xpval[rk,]
-  
+
   ncl <- ncol(xpval)
   nP <- nrow(xpval)
- 
+
   XLIM <- c(0, 1)
   YLIM <- c(0, spc*(nP- 1)*ncl+ncl)
-  
+
 #   colvar <- (1 - rkx) * (rkx >= deltam)*(rkx < 1)
 #   maxcloser <- ((1 - rkx)[rkx < deltam & rkx < 1])
 #   maxcloser <- min(maxcloser[maxcloser > max(colvar)])
@@ -242,7 +265,7 @@ GSABarplotClust <- function(x, colPal =  brewer.pal(4,"Reds"), main="",
     }
     text(XLIM[2],5+spc * (0 - 1)*ncl + 2.5*(ncl+1) -1,"clusters:",pos=2)
   par(xpd=NA)
-  
+
   }
    segments(x0=1,y0=-0.5,x1=1,y1=YLIM[2] ,col="dodgerblue",lwd=2)
   segments(x0=0.95,y0=-0.5,x1=0.95,y1=YLIM[2],col="dodgerblue",
@@ -252,14 +275,14 @@ GSABarplotClust <- function(x, colPal =  brewer.pal(4,"Reds"), main="",
     text(x= XLIM[1], y=spc * (1:nP - 1)*ncl + ncl/2-0.5,rownames(rkx),pos=2)
   par(xpd=NA)
   # image.scale(z=rkx, col = heat.colors(12))
-  
+
   par(mai=c(1.2,0.2,0.5,0.7), xaxs="i")
-  
+
   w <- 2
   val <- c(0, 0.9, 0.95,0.99,1)
 #   pos <- c(
 #   scale = (length(lut)-1)/(max-min)
-  plot(c(0,w), range(val), type='n', bty='n', xaxt='n', xlab="", 
+  plot(c(0,w), range(val), type='n', bty='n', xaxt='n', xlab="",
       yaxt='n', ylab='')#, main=title)
 #   axis(4, round(ticks,n), las=1)
   for (i in 1:(length(val)-1)) {
@@ -269,11 +292,11 @@ GSABarplotClust <- function(x, colPal =  brewer.pal(4,"Reds"), main="",
   }
   rect(0,val[1],w,tail(val,1), border="black")
   axis(4, at = val[-4], labels = TRUE, las=2)
-  
+
   par(op)
 }
 
-dGSABarplotClustOld <- function(x, colPal = c(rgb(0.95,0.95,0.95), 
+dGSABarplotClustOld <- function(x, colPal = c(rgb(0.95,0.95,0.95),
                   colorRampPalette(brewer.pal(3,"Reds"))(101)),
                   main="", FUN=max, spc=1.15){
 	### H-errorbar
@@ -281,17 +304,17 @@ dGSABarplotClustOld <- function(x, colPal = c(rgb(0.95,0.95,0.95),
 	# sensitivity ranking
 	rk <- order(x_max,decreasing = FALSE)
 	rkx <- x[,rk]
-	
+
 	ncl <- nrow(x)
 	nP <- ncol(x)
-	
+
 # 	isSens <- isSens[rk]
 
 	delta <- (abs(xmin[,rk] - xmax[,rk]))
 	deltap <- 1 + delta/2
 	deltam <- 1 - delta/2
 	XLIM <- c(min(0,deltam), max(rkx, deltap))
-	
+
 	colvar <- (1 - rkx) * (rkx >= deltam)*(rkx < 1)
 	maxcloser <- ((1 - rkx)[rkx < deltam & rkx < 1])
 	maxcloser <- min(maxcloser[maxcloser > max(colvar)])
@@ -324,7 +347,7 @@ dGSABarplotClustOld <- function(x, colPal = c(rgb(0.95,0.95,0.95),
 	  }
 	  text(XLIM[2],5+spc * (0 - 1)*ncl + 2.5*(ncl+1) -1,"clusters:",pos=2)
 	par(xpd=NA)
-	
+
 	}
 	segments(x0=1,y0=-1,x1=1,y1=z+2,col="dodgerblue",lwd=2)
 	title(main)
@@ -337,13 +360,13 @@ dGSABarplotClustOld <- function(x, colPal = c(rgb(0.95,0.95,0.95),
 }
 
 
-color.bar <- function(lut, min, max=-min, nticks=11, 
-                      ticks=seq(min, max, len=nticks), 
+color.bar <- function(lut, min, max=-min, nticks=11,
+                      ticks=seq(min, max, len=nticks),
                       title='', n = 3, w = 10) {
     scale = (length(lut)-1)/(max-min)
 #     dev.new(width=1.75, height=5)
 #     par(mai=c(0.2,0.2,0.2,0.2))
-    plot(c(0,w), c(min,max), type='n', bty='n', xaxt='n', xlab='', 
+    plot(c(0,w), c(min,max), type='n', bty='n', xaxt='n', xlab='',
         yaxt='n', ylab='', main=title)
     axis(4, round(ticks,n), las=1)
     for (i in 1:(length(lut)-1)) {
@@ -353,8 +376,8 @@ color.bar <- function(lut, min, max=-min, nticks=11,
 }
 
 
-# 
-# GSABarplot <- function(x,xmin,xmax,isSens, colPal = c(rgb(0.95,0.95,0.95), 
+#
+# GSABarplot <- function(x,xmin,xmax,isSens, colPal = c(rgb(0.95,0.95,0.95),
 # colorRampPalette(brewer.pal(3,"Reds"))(101)),
 #             main=""){
 #   ### H-errorbar
@@ -362,12 +385,12 @@ color.bar <- function(lut, min, max=-min, nticks=11,
 #   rk <- order(x,decreasing = FALSE)
 #   isSens <- isSens[rk]
 #   rkx <- x[rk]
-# 
+#
 #   delta <- as.vector(abs(xmin[rk] - xmax[rk]))
 #   deltap <- 1 + delta/2
 #   deltam <- 1 - delta/2
 #   XLIM <- c(min(0,deltam), max(rkx, deltap))
-#   
+#
 # #   maxcloser <- min((1 - rkx)[rkx < deltam & rkx < 1])
 # #   colvar <- (1 - rkx) * (rkx >= deltam)*(rkx < 1)
 # #   colvar <- 100 * (max(colvar) - (colvar))/maxcloser*(rkx < 1)
@@ -389,7 +412,7 @@ color.bar <- function(lut, min, max=-min, nticks=11,
 #     }else{
 #       myCol <- colPal[colvar[i]]
 #     }
-#     rect(xleft=0,ybottom=z-0.4,xright=rkx[i],ytop=z+0.4, col=myCol, 
+#     rect(xleft=0,ybottom=z-0.4,xright=rkx[i],ytop=z+0.4, col=myCol,
 #           lwd=1+isSens[i]*3)
 #     arrows(deltam[i], z, deltap[i], z, length=0.05, angle=90, code=3)
 #   }
@@ -401,8 +424,8 @@ color.bar <- function(lut, min, max=-min, nticks=11,
 #   # image.scale(z=rkx, col = heat.colors(12))
 #   color.bar(lut=colPal,min=min(rkx), max=max(rkx),n=2)
 # }
-# 
-# GSABarplotClust <- function(x,xmin,xmax, colPal = c(rgb(0.95,0.95,0.95), 
+#
+# GSABarplotClust <- function(x,xmin,xmax, colPal = c(rgb(0.95,0.95,0.95),
 #                   colorRampPalette(brewer.pal(3,"Reds"))(101)),
 #                   main="", FUN=max, spc=1.15){
 #   ### H-errorbar
@@ -410,17 +433,17 @@ color.bar <- function(lut, min, max=-min, nticks=11,
 #   # sensitivity ranking
 #   rk <- order(x_max,decreasing = FALSE)
 #   rkx <- x[,rk]
-#   
+#
 #   ncl <- nrow(x)
 #   nP <- ncol(x)
-#   
+#
 # #   isSens <- isSens[rk]
-# 
+#
 #   delta <- (abs(xmin[,rk] - xmax[,rk]))
 #   deltap <- 1 + delta/2
 #   deltam <- 1 - delta/2
 #   XLIM <- c(min(0,deltam), max(rkx, deltap))
-#   
+#
 #   colvar <- (1 - rkx) * (rkx >= deltam)*(rkx < 1)
 #   maxcloser <- ((1 - rkx)[rkx < deltam & rkx < 1])
 #   maxcloser <- min(maxcloser[maxcloser > max(colvar)])
@@ -453,16 +476,16 @@ color.bar <- function(lut, min, max=-min, nticks=11,
 #     }
 #     text(XLIM[2],5+spc * (0 - 1)*ncl + 2.5*(ncl+1) -1,"clusters:",pos=2)
 #   par(xpd=NA)
-#   
+#
 #   }
 #   segments(x0=1,y0=-1,x1=1,y1=z+2,col="dodgerblue",lwd=2)
 #   title(main)
 #   par(xpd=TRUE)
-# #   text(x= XLIM[1], 
+# #   text(x= XLIM[1],
 # y=(ncl+0.70)*(seq_along(rkx[1,])-1)+2.5,colnames(rkx),pos=2)
 #   text(x= XLIM[1], y=spc * (1:nP - 1)*ncl + ncl/2-0.5,colnames(rkx),pos=2)
 #   par(xpd=NA)
 #   # image.scale(z=rkx, col = heat.colors(12))
 #   color.bar(lut=colPal,min=min(rkx), max=max(rkx),n=2)
 # }
-# 
+#
